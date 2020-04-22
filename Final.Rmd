@@ -1,0 +1,149 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r}
+library(dplyr)
+library(rmdformats) 
+library(corrgram)
+library(MASS)
+library(ggplot2)
+library(naniar)
+library(lattice)
+library(memisc)
+library(ggpubr)
+library(ggcorrplot)
+library(ResourceSelection)
+library(gridExtra)
+library(tidyverse)
+library(leaps)
+library(car)
+library(arm)
+```
+
+## Introduction 
+
+Diamonds are said to be one of the most precious and sought after gemstones. For a long time, diamond pricing and trading was controlled by monopolist corporation, De Beers Group. This monopoly has since been dismantled and we now have several diamond suppliers and traders all over the world. We are even able to custom build our own diamond jewellery online with our preferred specifications such as the diamond weight (carat), diamond color, clarity level and cut type to name a few. These parameters influence the diamond quality and hence, the price. 
+
+In order to predict the price of a diamond, we analyze a dataset of 53,940 diamonds and 10 of their variables. There are seven variables of continuous data type, namely, price (in USD), carat (weight), depth percentage(ratio of height to width), table (width of top of diamond), x(length in mm), y(width in mm), z (depth in mm). There are 3 ordinal categorical variables, namely cut, clarity and color. These variables, also known as the 3 C's are all ordered based on their quality; from worst to best.
+
+### Research Questions
+1.	What is the inter-relation (association, correlation) between the price of diamonds and the 4 C's? How much total information do they provide?
+3.	How well the price of diamonds be predicted by the cut, clarity, color and carat?
+
+## Univariate Analysis
+
+##### Price Mean
+```{r}
+diamonds_mean<-matrix(c(mean(diamonds$price), mean(diamonds$carat)), ncol=2)
+rownames(diamonds_mean) <- c("")
+colnames(diamonds_mean) <- c("Mean Price", "Mean Carat")
+print(diamonds_mean)
+```
+##### Price Median
+```{r}
+diamonds_median<-matrix(c(median(diamonds$price), median(diamonds$carat)),ncol=2)
+rownames(diamonds_median) <- c("")
+colnames(diamonds_median) <- c("Mean Price", "Mean Carat")
+print(diamonds_median)
+```
+
+##### Percentile Range
+```{r}
+quantile_diamond<- matrix(c(quantile(diamonds$price),quantile(diamonds$carat)), ncol = 2)
+rownames(quantile_diamond)<- c("Min Price", "25th Percentile", "50th Percentile", "75th Percentile", "Max Price")
+colnames(quantile_diamond)<- c("Price Percentiles", "Carat Percentiles")
+print(quantile_diamond)
+```
+##### Standard Deviation
+```{r}
+diamonds_sd<-matrix(c(sd(diamonds$price), sd(diamonds$carat)), ncol = 2)
+colnames(diamonds_sd)<-c("Price SD", "Carat SD")
+rownames(diamonds_sd)<-c("")
+print(diamonds_sd)
+```
+##### Price Range
+```{r}
+diamond_range<- matrix(c(min(diamonds$price), max(diamonds$price), max(diamonds$price)-min(diamonds$price)), byrow = TRUE, ncol=3)
+colnames(diamond_range)<- c("Lowest Price ($)", "Highest Price($)", "Price Range")
+rownames(diamond_range)<-c("")
+print(diamond_range)
+```
+
+```{r}
+carat_range<-matrix(c(min(diamonds$carat), max(diamonds$carat), max(diamonds$carat)-min(diamonds$carat)),byrow = TRUE, ncol=3)
+colnames(carat_range)<- c("Lowest Carat", "Highest Carat", "Carat Range")
+rownames(carat_range)<-c("")
+print(carat_range)
+```
+
+The analysis of central tendency and dispersion show that the price of the diamonds is highly skewed. The mean price ($3932) is higher than the median price($2401), also implying that majority of the data is skewed to the right. The data also has a large standard deviation of $3989,signifying that there is large variance of price in the data. We also see from the percentile range that 75% of the prices are between $326 and $5325, a much smaller range in comparison to the range of prices of the entire dataset.
+
+A logarithmic transformation of the price variable could be valuable for identifying patterns and making them easier to interpret and to help meet with linear regression assumptions that will be evaluated in the coming sections.
+
+### Data Transformation
+We analyze the outcome variable; price and a predictor variable; carat. The other continuous varables, which relate to the dimensions of the diamond contribute to the total weight of the diamond, therefore they will not be analyzed along with carats in order to avoid multicollinearity. As previously mentioned, the histograms also show that both price and carat are right skewed. This makes sense considering that there is a wide range of diamonds available to the public however majority of the population will be unable to afford the larger carats, and neither do they have utility for it. 
+
+```{r}
+scatterprice<- diamonds %>% ggplot(aes(x=carat, y=price)) + geom_point(color="black") +labs(x="Carat", y="Price($)", title =  "Plot Analysis of Diamond Prices and Carats")+geom_smooth(method= "lm", col= "red")+ylim(0,20000)+theme_classic()+ theme(plot.title = element_text(size = 12, hjust = 0.5))
+histoprice<- diamonds %>% ggplot(aes(x=price)) + geom_histogram(aes(y=..density..))+stat_function(fun=dnorm, args = list(mean= mean(diamonds$price), sd=sd(diamonds$price))) +labs(x="Price ($)", y="Diamond Count") +theme_classic()
+histocarat<- diamonds %>% ggplot(aes(x=carat)) + geom_histogram(aes(y=..density..))+stat_function(fun=dnorm, args = list(mean= mean(diamonds$carat), sd=sd(diamonds$carat))) +labs(x="Carat", y="Diamond Count")+theme_classic()
+scatterprice
+grid.arrange(histoprice,histocarat, ncol = 2)
+```
+
+Our dataset is positively skewed and contains a large number of outliers. However, after we complete the transformation, the data appears to follow a normal distribution. Further analysis of normality was not completed as this is not one of our model's assumptions.
+
+
+``` {r}
+diamonds_data <- diamonds %>% mutate(log_price = log10(price),  
+  log_carat = log10(carat))
+
+histologprice<- diamonds_data %>% ggplot((aes(x = log_price))) +
+  geom_histogram(binwidth = 0.05, aes(y=..density..)) +
+  ggtitle('Diamond prices') + theme_classic() + stat_function(fun=dnorm, args = list(mean= mean(diamonds_data$log_price), sd=sd(diamonds_data$log_price))) +  labs(x="Log of Price", y="Diamond Count")
+  
+histologcarat<- diamonds_data %>% ggplot((aes(x = log_carat))) +
+  geom_histogram(binwidth = 0.05, aes(y=..density..)) +
+  ggtitle('Diamond prices') + theme_classic() + stat_function(fun=dnorm, args = list(mean= mean(diamonds_data$log_carat), sd=sd(diamonds_data$log_carat)))  +  labs(x="Log of Carat", y="Diamond Count")
+
+grid.arrange(histologprice, histologcarat, ncol=2)
+```
+
+An analysis of the below plots indicate that the outlier diamonds in our data have a peculiarity, being that the seem to be of lower quality cut, clarity and color. Therefore, we will not exclude these datapoints. 
+
+```{r}
+diamondclarity<-ggplot(diamonds, aes(x = log(carat), y = log(price))) + geom_point(alpha = 0.5, size = 1, position = 'jitter', aes(color=clarity)) + labs(x="Carats", y="Price($)") + theme_classic()
+diamondcut<-ggplot(diamonds, aes(x = log(carat), y = log(price))) + geom_point(alpha = 0.5, size = 1, position = 'jitter', aes(color=cut)) + labs(x="Carats", y="Price($)") + theme_classic()
+diamondcolor<-ggplot(diamonds, aes(x = log(carat), y = log(price))) + geom_point(alpha = 0.5, size = 1, position = 'jitter', aes(color=color)) + labs(x="Log of Carat", y="Log of Price($)") + theme_classic()
+grid.arrange(diamondcolor, diamondcut, diamondclarity, ncol = 3)
+#add slope lines to graphs
+```
+
+## Multivariate Analysis - Predicting Diamond Prices
+We have confirmed there is a positive correlation between diamond price and carat *r=0.92, p<0.001*. We have also deduced from the above plots that the 3 C's have an impact on pricing too. Specifically, a better Cut diamond which is of Color "D" and has IF (Internally Flawless) Clarity should be more expensive. However, we will like to create a predictive model to determine the expected price of the diamond based on given parameters.
+
+### Multiple Regression Model
+```{r}
+model_1 <- lm(formula = log(price) ~ log(carat), data = diamonds)
+model_2 <- lm(formula= log(price) ~ log(carat) + clarity, data = diamonds)
+model_3 <- lm(formula= log(price) ~ log(carat) + clarity + cut, data = diamonds)
+model_4 <- lm(formula= log(price) ~ log(carat) + clarity + cut + color, data = diamonds)
+model_5 <- lm(formula= log(price) ~ log(carat) + clarity + cut + color + carat, data = diamonds)
+mtable(model_1, model_2, model_3, model_4, model_5, sdigits = 3)
+```
+We generated five different regression models, each with an additional predictor variable. The most accurate model is model 4, it has a combination of cut, color, clarity and the log of carat predictors, with r= 0.983, p<0.001. This model explained over 98% of the total variance in price. The addition of further variables did not improve the past an R-square of 0.983.
+
+## Assumption Tests
+```{r}
+vif(model_4) #notviolated
+max(cooks.distance(model_4)) #notviolated
+plot(model_4) #not sure if homoscedasticity assumption is met
+```
+
+We tested the assumptions of our linear regression model and found that all variance inflation factors (VIF) are significantly below 10, this indicates that there is no concern for multicollinearity. Also, the Residuals vs Leverage plot don't show any influential cases, this is confirmed by the maximum Cook's distance for our model (0.02). The Residuals vs Fitted plot clearly shows a straight line which indicates a good linear relationship. The Scale vs Location plot may be used to check the homoscedasticity of the residuals, for our model the plot appears to follow an almost horizontal line; however, the points don't appear to be equally spread which could be an indication of heteroscedasticity.
